@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 45 36% 94%;
+    --foreground: 30 12% 9%;
+    --card: 48 44% 97%;
+    --card-foreground: 30 12% 9%;
+    --popover: 48 44% 97%;
+    --popover-foreground: 30 12% 9%;
+    --primary: 30 12% 9%;
+    --primary-foreground: 45 36% 94%;
+    --secondary: 44 24% 89%;
+    --secondary-foreground: 30 12% 9%;
+    --muted: 44 24% 89%;
+    --muted-foreground: 36 9% 38%;
+    --accent: 71 93% 55%;
+    --accent-foreground: 30 12% 9%;
+    --destructive: 8 68% 42%;
+    --destructive-foreground: 45 36% 94%;
+    --border: 40 16% 82%;
+    --input: 40 16% 78%;
+    --ring: 71 80% 38%;
+    --positive: 152 48% 30%;
+    --negative: 8 68% 42%;
+    --radius: 0.625rem;
+    --sidebar-background: 30 12% 9%;
+    --sidebar-foreground: 45 36% 94%;
+    --sidebar-primary: 71 93% 55%;
+    --sidebar-primary-foreground: 30 12% 9%;
+    --sidebar-accent: 30 10% 16%;
+    --sidebar-accent-foreground: 45 36% 94%;
+    --sidebar-border: 30 10% 18%;
+    --sidebar-ring: 71 80% 38%;
+  }
+}
+
+body {
+  font-family: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  overflow-x: clip;
+}
+
+::selection {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
