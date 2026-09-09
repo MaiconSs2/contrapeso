@@ -37,7 +37,7 @@ create table if not exists public.credit_cards (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null, bank text not null,
-  credit_limit numeric(14,2) not null default 0 check (credit_limit >= 0),
+  credit_limit numeric(14,2) default 0,
   closing_day integer,
   due_day integer,
   color text,
@@ -69,6 +69,11 @@ alter table public.transactions add column if not exists account_id uuid;
 alter table public.credit_cards add column if not exists card_type text not null default 'credito';
 alter table public.credit_cards add column if not exists account_id uuid;
 alter table public.credit_cards add column if not exists initial_balance numeric(14,2) not null default 0;
+alter table public.credit_cards alter column credit_limit drop not null;
+alter table public.credit_cards alter column closing_day drop not null;
+alter table public.credit_cards alter column due_day drop not null;
+alter table public.credit_cards drop constraint if exists credit_cards_credit_limit_check;
+alter table public.credit_cards add constraint credit_cards_credit_limit_check check (card_type <> 'credito' or (credit_limit is not null and credit_limit >= 0));
 
 -- Existing cards are credit cards.
 update public.credit_cards set card_type = 'credito' where card_type is null;

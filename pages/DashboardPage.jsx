@@ -102,17 +102,30 @@ export default function DashboardPage() {
             if (row) row[t.type === 'entrada' ? 'entradas' : 'saidas'] += t.amount;
         });
 
-        // Compras feitas diretamente na área Cartões também entram no gasto do mês.
-        // Compras criadas pela tela de Transações já possuem card_purchase_id e não são duplicadas.
+        // Compras de cartão entram no mês da respectiva parcela, mesmo quando foram lançadas pela tela de Transações.
         purchases.forEach((purchase) => {
-            const purchaseMonth = monthKey(purchase.purchase_date);
-            const alreadyLinked = transactions.some(t => t.card_purchase_id === purchase.id);
-            if (purchaseMonth === month && !alreadyLinked) {
-                saidasMes += Number(purchase.amount || 0);
-                byCategory[purchase.category] = (byCategory[purchase.category] || 0) + Number(purchase.amount || 0);
+            const card = cards.find(c => c.id === purchase.card_id);
+            const isCredit = (card?.card_type || 'credito') === 'credito';
+            const linked = transactions.some(t => t.card_purchase_id === purchase.id);
+            if (isCredit && card?.closing_day) {
+                const each = Number(purchase.amount || 0) / Math.max(1, Number(purchase.installments || 1));
+                installmentInvoiceMonths(purchase, card.closing_day).forEach((purchaseMonth) => {
+                    const row = monthly.find((m) => m.key === purchaseMonth);
+                    if (purchaseMonth === month) {
+                        saidasMes += each;
+                        byCategory[purchase.category] = (byCategory[purchase.category] || 0) + each;
+                    }
+                    if (row) row.saidas += each;
+                });
+            } else if (!linked) {
+                const purchaseMonth = monthKey(purchase.purchase_date);
+                if (purchaseMonth === month) {
+                    saidasMes += Number(purchase.amount || 0);
+                    byCategory[purchase.category] = (byCategory[purchase.category] || 0) + Number(purchase.amount || 0);
+                }
+                const row = monthly.find((m) => m.key === purchaseMonth);
+                if (row) row.saidas += Number(purchase.amount || 0);
             }
-            const row = monthly.find((m) => m.key === purchaseMonth);
-            if (row && !alreadyLinked) row.saidas += Number(purchase.amount || 0);
         });
 
         let investido = 0;
