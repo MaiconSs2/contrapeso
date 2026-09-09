@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Helmet } from 'react-helmet';
 import { ArrowDownLeft, ArrowUpRight, PiggyBank, Wallet } from 'lucide-react';
 import {
     Bar,
@@ -106,15 +105,7 @@ export default function DashboardPage() {
 
     return (
         <div>
-            <Helmet>
-                <title>Visão geral — Contrapeso</title>
-                <meta
-                    name="description"
-                    content="Saldo, entradas e saídas do mês, evolução de seis meses e o valor atual da sua carteira de investimentos."
-                />
-            </Helmet>
-
-            <Reveal>
+<Reveal>
                 <header className="relative mb-10">
                     <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
                         Visão geral

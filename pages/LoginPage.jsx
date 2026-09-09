@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { Helmet } from 'react-helmet';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -33,15 +32,7 @@ export default function LoginPage() {
 
     return (
         <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-background px-4 py-10">
-            <Helmet>
-                <title>Entrar — Contrapeso</title>
-                <meta
-                    name="description"
-                    content="Acesse o Contrapeso para lançar entradas e saídas, categorizar transações e acompanhar sua carteira de investimentos."
-                />
-            </Helmet>
-
-            <div
+<div
                 aria-hidden="true"
                 className="absolute -right-16 top-10 h-56 w-56 rotate-12 bg-accent"
             />

@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Helmet } from 'react-helmet';
 import { Pencil, Plus, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -95,15 +94,7 @@ export default function InvestmentsPage() {
 
     return (
         <div>
-            <Helmet>
-                <title>Investimentos — Contrapeso</title>
-                <meta
-                    name="description"
-                    content="Acompanhe sua carteira: tamanho das posições, preço médio de compra, data e comparação com o preço atual."
-                />
-            </Helmet>
-
-            <Reveal>
+<Reveal>
                 <header className="relative mb-8 flex flex-wrap items-end justify-between gap-4">
                     <div>
                         <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">

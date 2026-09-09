@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Helmet } from 'react-helmet';
 import { ArrowDownLeft, ArrowUpRight, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import pb from '@/lib/pocketbaseClient';
@@ -89,15 +88,7 @@ export default function TransactionsPage() {
 
     return (
         <div>
-            <Helmet>
-                <title>Transações — Contrapeso</title>
-                <meta
-                    name="description"
-                    content="Lance, categorize, edite e exclua entradas e saídas. Filtre por tipo, categoria, mês ou descrição."
-                />
-            </Helmet>
-
-            <Reveal>
+<Reveal>
                 <header className="relative mb-8 flex flex-wrap items-end justify-between gap-4">
                     <div>
                         <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">

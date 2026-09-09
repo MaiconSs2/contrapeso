@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { Helmet } from 'react-helmet';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -45,15 +44,7 @@ export default function SignupPage() {
 
     return (
         <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-background px-4 py-10">
-            <Helmet>
-                <title>Criar conta — Contrapeso</title>
-                <meta
-                    name="description"
-                    content="Crie sua conta no Contrapeso e comece a organizar entradas, saídas e investimentos em um só lugar."
-                />
-            </Helmet>
-
-            <div
+<div
                 aria-hidden="true"
                 className="absolute -left-16 top-16 h-56 w-56 -rotate-12 bg-accent"
             />

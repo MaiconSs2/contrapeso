@@ -22,7 +22,7 @@ Crie `.env.local` a partir de `.env.example`:
 
 ```text
 VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
-VITE_SUPABASE_ANON_KEY=SUA_CHAVE_PUBLICA
+VITE_SUPABASE_PUBLISHABLE_KEY=SUA_CHAVE_PUBLICA
 ```
 
 Nunca coloque uma `service_role` key no navegador.
@@ -49,7 +49,7 @@ Configuração:
 Em **Project Settings → Environment Variables**, adicione:
 
 - `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
 
 Depois faça um novo deploy.
 
