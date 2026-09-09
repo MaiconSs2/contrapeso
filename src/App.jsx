@@ -10,6 +10,7 @@ import SignupPage from '@/pages/SignupPage';
 import DashboardPage from '@/pages/DashboardPage';
 import TransactionsPage from '@/pages/TransactionsPage';
 import InvestmentsPage from '@/pages/InvestmentsPage';
+import CreditCardsPage from '@/pages/CreditCardsPage';
 
 function App() {
     return (
@@ -46,6 +47,16 @@ function App() {
                             <ProtectedRoute>
                                 <AppLayout>
                                     <InvestmentsPage />
+                                </AppLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/cartoes"
+                        element={
+                            <ProtectedRoute>
+                                <AppLayout>
+                                    <CreditCardsPage />
                                 </AppLayout>
                             </ProtectedRoute>
                         }

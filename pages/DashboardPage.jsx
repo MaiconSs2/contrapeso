@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowDownLeft, ArrowUpRight, PiggyBank, Wallet } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, PiggyBank, Wallet, CreditCard } from 'lucide-react';
 import {
     Bar,
     BarChart,
@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Reveal from '@/components/Reveal';
 import {
     CATEGORY_LABELS,
+    installmentInvoiceMonths,
     CHART_COLORS,
     currentMonthKey,
     formatBRL,
@@ -30,23 +31,35 @@ export default function DashboardPage() {
     const { user } = useAuth();
     const [transactions, setTransactions] = useState(null);
     const [investments, setInvestments] = useState(null);
+    const [cards, setCards] = useState(null);
+    const [purchases, setPurchases] = useState(null);
+    const [invoices, setInvoices] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
         Promise.all([
             pb.collection('transactions').getFullList({ sort: '-date' }),
             pb.collection('investments').getFullList({ sort: 'asset' }),
+            pb.collection('credit_cards').getFullList({ sort: 'name' }),
+            pb.collection('card_purchases').getFullList({ sort: '-purchase_date' }),
+            pb.collection('card_invoices').getFullList({ sort: '-reference_month' }),
         ])
-            .then(([tx, inv]) => {
+            .then(([tx, inv, cardRows, purchaseRows, invoiceRows]) => {
                 if (cancelled) return;
                 setTransactions(tx);
                 setInvestments(inv);
+                setCards(cardRows);
+                setPurchases(purchaseRows);
+                setInvoices(invoiceRows);
             })
             .catch((err) => {
                 console.error('Falha ao carregar visão geral', err);
                 if (!cancelled) {
                     setTransactions([]);
                     setInvestments([]);
+                    setCards([]);
+                    setPurchases([]);
+                    setInvoices([]);
                 }
             });
         return () => {
@@ -55,7 +68,7 @@ export default function DashboardPage() {
     }, []);
 
     const stats = useMemo(() => {
-        if (!transactions || !investments) return null;
+        if (!transactions || !investments || !cards || !purchases || !invoices) return null;
         const month = currentMonthKey();
         let entradasMes = 0;
         let saidasMes = 0;
@@ -72,7 +85,8 @@ export default function DashboardPage() {
 
         transactions.forEach((t) => {
             const sign = t.type === 'entrada' ? 1 : -1;
-            saldo += sign * t.amount;
+            // Compras no cartão comprometem crédito, mas só saem do caixa quando a fatura é paga.
+            if (t.payment_method !== 'cartao') saldo += sign * t.amount;
             if (monthKey(t.date) === month) {
                 if (t.type === 'entrada') entradasMes += t.amount;
                 else {
@@ -82,6 +96,19 @@ export default function DashboardPage() {
             }
             const row = monthly.find((m) => m.key === monthKey(t.date));
             if (row) row[t.type === 'entrada' ? 'entradas' : 'saidas'] += t.amount;
+        });
+
+        // Compras feitas diretamente na área Cartões também entram no gasto do mês.
+        // Compras criadas pela tela de Transações já possuem card_purchase_id e não são duplicadas.
+        purchases.forEach((purchase) => {
+            const purchaseMonth = monthKey(purchase.purchase_date);
+            const alreadyLinked = transactions.some(t => t.card_purchase_id === purchase.id);
+            if (purchaseMonth === month && !alreadyLinked) {
+                saidasMes += Number(purchase.amount || 0);
+                byCategory[purchase.category] = (byCategory[purchase.category] || 0) + Number(purchase.amount || 0);
+            }
+            const row = monthly.find((m) => m.key === purchaseMonth);
+            if (row && !alreadyLinked) row.saidas += Number(purchase.amount || 0);
         });
 
         let investido = 0;
@@ -97,7 +124,20 @@ export default function DashboardPage() {
             .sort((a, b) => b.value - a.value)
             .slice(0, 6);
 
-        return { entradasMes, saidasMes, saldo, monthly, categorias, investido, carteira };
+        const cardData = cards.map(card => {
+            const paid = new Set(invoices.filter(i => i.card_id === card.id && i.status === 'paid').map(i => i.reference_month));
+            const installments = purchases.filter(p => p.card_id === card.id).flatMap(p => {
+                const each = Number(p.amount || 0) / Math.max(1, Number(p.installments || 1));
+                return installmentInvoiceMonths(p, card.closing_day).map((month, index) => ({ month, value: each, index }));
+            });
+            const committed = installments.filter(x => !paid.has(x.month)).reduce((sum,x)=>sum+x.value,0);
+            return { card, committed, available: Math.max(0, Number(card.credit_limit || 0) - committed) };
+        });
+        const limiteTotal = cardData.reduce((sum,x)=>sum+Number(x.card.credit_limit||0),0);
+        const comprometido = cardData.reduce((sum,x)=>sum+x.committed,0);
+        const disponivelCredito = cardData.reduce((sum,x)=>sum+x.available,0);
+        const disponivelReal = saldo - comprometido;
+        return { entradasMes, saidasMes, saldo, monthly, categorias, investido, carteira, limiteTotal, comprometido, disponivelCredito, disponivelReal, cardData };
     }, [transactions, investments]);
 
     const loading = !stats;
@@ -144,6 +184,13 @@ export default function DashboardPage() {
                                     entradas menos saídas, desde o início
                                 </p>
                             </div>
+                            <Link to="/cartoes" className="group rounded-xl border border-border bg-card p-5 transition-colors hover:border-foreground/40">
+                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                                    <CreditCard className="h-4 w-4" /> Crédito comprometido
+                                </div>
+                                <p className="mt-3 text-3xl font-bold">{formatBRL(stats.comprometido)}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">Disponível nos cartões: {formatBRL(stats.disponivelCredito)}</p>
+                            </Link>
                             <div className="rounded-xl border border-border bg-card p-5">
                                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                                     <ArrowUpRight className="h-4 w-4 text-positive" /> Entradas no mês

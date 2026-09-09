@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, List, PiggyBank, LogOut } from 'lucide-react';
+import { LayoutDashboard, List, PiggyBank, LogOut, CreditCard } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 
@@ -8,6 +8,7 @@ const nav = [
   { to: '/', label: 'Visão geral', icon: LayoutDashboard, end: true },
   { to: '/transacoes', label: 'Transações', icon: List },
   { to: '/investimentos', label: 'Investimentos', icon: PiggyBank },
+  { to: '/cartoes', label: 'Cartões', icon: CreditCard },
 ];
 
 export default function AppLayout({ children }) {

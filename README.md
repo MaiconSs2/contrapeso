@@ -1,66 +1,50 @@
-# Contrapeso — versão Vercel + Supabase
+# Contrapeso
 
-Esta versão remove a dependência do servidor PocketBase e usa:
+Aplicação pessoal de finanças com React + Vite + Supabase.
 
-- **Vercel** para o site React/Vite;
-- **Supabase** para login + PostgreSQL + RLS;
-- domínio gratuito `*.vercel.app` no primeiro deploy.
+## O que há nesta versão
 
-## 1. Criar o banco
+- Dashboard financeiro
+- Entradas e saídas
+- Investimentos
+- Cartões de crédito
+- Limite utilizado e disponível
+- Fatura atual por cartão
+- Compras à vista e parceladas
+- Compromissos das próximas faturas
+- Marcação de fatura como paga, gerando a saída correspondente no caixa
+- Visão de “disponível real”: saldo em conta menos faturas abertas
+- RLS no Supabase para separar os dados por usuário
 
-1. Crie um projeto no Supabase.
-2. Abra **SQL Editor**.
-3. Cole e execute `supabase/schema.sql`.
-4. Em Authentication, mantenha o cadastro por e-mail/senha habilitado.
-5. Para testar sem confirmação por e-mail, desative **Confirm Email** temporariamente. Para uso público, é preferível manter a confirmação ativada.
+## Supabase
 
-## 2. Pegar as chaves
+No SQL Editor do seu projeto Supabase, execute **todo** o arquivo `supabase/schema.sql`.
 
-No Supabase, copie o **Project URL** e a chave pública/publishable (ou anon, conforme o painel mostrar).
+Se você já usava a versão anterior do Contrapeso, o script contém `alter table ... add column if not exists` para atualizar a tabela `transactions` e cria as novas tabelas de cartões.
 
-Crie `.env.local` a partir de `.env.example`:
+Na Vercel, use:
 
 ```text
-VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=SUA_CHAVE_PUBLICA
+VITE_SUPABASE_URL=https://seu-projeto.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
-Nunca coloque uma `service_role` key no navegador.
+Nunca coloque uma chave `sb_secret_...` em variável `VITE_` ou no código do navegador.
 
-## 3. Testar localmente
+## Cartões
 
-```bash
-npm install
-npm run dev
-```
+Cadastre o cartão com:
 
-Abra a URL mostrada pelo Vite, normalmente `http://localhost:5173`.
+- nome
+- banco
+- limite
+- dia de fechamento
+- dia de vencimento
 
-## 4. Publicar na Vercel
+Uma compra feita depois do fechamento entra na fatura do mês seguinte. Parcelamentos são distribuídos pelas faturas seguintes.
 
-A forma mais simples é subir esta pasta para um repositório GitHub e importar o repositório na Vercel.
+Quando uma fatura é marcada como paga, o Contrapeso cria uma saída no caixa com a data do pagamento e libera o limite correspondente.
 
-Configuração:
+## Vercel
 
-- Framework: **Vite** (ou detecção automática)
-- Build command: `npm run build`
-- Output directory: `dist`
-
-Em **Project Settings → Environment Variables**, adicione:
-
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_PUBLISHABLE_KEY`
-
-Depois faça um novo deploy.
-
-## 5. URL de confirmação de e-mail
-
-Se a confirmação de e-mail estiver ativada, no Supabase configure a URL do site da Vercel nas configurações de Authentication/URL Configuration. Durante o desenvolvimento, mantenha também `http://localhost:5173` nas URLs permitidas.
-
-## Segurança
-
-As tabelas têm Row Level Security (RLS). Cada registro é associado ao usuário autenticado por `user_id`, e as políticas permitem que cada usuário leia/edite/exclua somente os próprios registros.
-
-## Observação
-
-O projeto original recebido tinha a estrutura de monorepo incompleta no ZIP e fazia referência a um `pocketbaseClient` que não estava presente. Esta versão reorganiza o frontend em um projeto Vite normal e mantém a API interna compatível para reduzir as alterações nas páginas existentes.
+O `vercel.json` contém a regra de SPA para que `/login`, `/cadastro`, `/transacoes`, `/investimentos` e `/cartoes` funcionem ao recarregar a página.
