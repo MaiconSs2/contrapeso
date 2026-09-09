@@ -9,6 +9,7 @@ import LoginPage from '@/pages/LoginPage';
 import SignupPage from '@/pages/SignupPage';
 import DashboardPage from '@/pages/DashboardPage';
 import TransactionsPage from '@/pages/TransactionsPage';
+import AccountsPage from '@/pages/AccountsPage';
 import InvestmentsPage from '@/pages/InvestmentsPage';
 import CreditCardsPage from '@/pages/CreditCardsPage';
 

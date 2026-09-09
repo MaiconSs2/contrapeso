@@ -34,6 +34,7 @@ export default function DashboardPage() {
     const [cards, setCards] = useState(null);
     const [purchases, setPurchases] = useState(null);
     const [invoices, setInvoices] = useState(null);
+    const [accounts, setAccounts] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -43,14 +44,16 @@ export default function DashboardPage() {
             pb.collection('credit_cards').getFullList({ sort: 'name' }),
             pb.collection('card_purchases').getFullList({ sort: '-purchase_date' }),
             pb.collection('card_invoices').getFullList({ sort: '-reference_month' }),
+            pb.collection('accounts').getFullList({ sort: 'name' }),
         ])
-            .then(([tx, inv, cardRows, purchaseRows, invoiceRows]) => {
+            .then(([tx, inv, cardRows, purchaseRows, invoiceRows, accountRows]) => {
                 if (cancelled) return;
                 setTransactions(tx);
                 setInvestments(inv);
                 setCards(cardRows);
                 setPurchases(purchaseRows);
                 setInvoices(invoiceRows);
+                setAccounts(accountRows);
             })
             .catch((err) => {
                 console.error('Falha ao carregar visão geral', err);
@@ -60,6 +63,7 @@ export default function DashboardPage() {
                     setCards([]);
                     setPurchases([]);
                     setInvoices([]);
+                    setAccounts([]);
                 }
             });
         return () => {
@@ -68,7 +72,7 @@ export default function DashboardPage() {
     }, []);
 
     const stats = useMemo(() => {
-        if (!transactions || !investments || !cards || !purchases || !invoices) return null;
+        if (!transactions || !investments || !cards || !purchases || !invoices || !accounts) return null;
         const month = currentMonthKey();
         let entradasMes = 0;
         let saidasMes = 0;
@@ -86,7 +90,7 @@ export default function DashboardPage() {
         transactions.forEach((t) => {
             const sign = t.type === 'entrada' ? 1 : -1;
             // Compras no cartão comprometem crédito, mas só saem do caixa quando a fatura é paga.
-            if (t.payment_method !== 'cartao') saldo += sign * t.amount;
+            if (!['cartao','beneficio'].includes(t.payment_method)) saldo += sign * Number(t.amount || 0);
             if (monthKey(t.date) === month) {
                 if (t.type === 'entrada') entradasMes += t.amount;
                 else {
@@ -124,7 +128,7 @@ export default function DashboardPage() {
             .sort((a, b) => b.value - a.value)
             .slice(0, 6);
 
-        const cardData = cards.map(card => {
+        const cardData = cards.filter(card => (card.card_type || 'credito') === 'credito').map(card => {
             const paid = new Set(invoices.filter(i => i.card_id === card.id && i.status === 'paid').map(i => i.reference_month));
             const installments = purchases.filter(p => p.card_id === card.id).flatMap(p => {
                 const each = Number(p.amount || 0) / Math.max(1, Number(p.installments || 1));
@@ -133,12 +137,18 @@ export default function DashboardPage() {
             const committed = installments.filter(x => !paid.has(x.month)).reduce((sum,x)=>sum+x.value,0);
             return { card, committed, available: Math.max(0, Number(card.credit_limit || 0) - committed) };
         });
+        const benefitData = cards.filter(card => (card.card_type || 'credito') !== 'credito').map(card => {
+            const spent = purchases.filter(p => p.card_id === card.id).reduce((sum,p) => sum + Number(p.amount || 0), 0);
+            return { card, spent, available: Math.max(0, Number(card.initial_balance || 0) - spent) };
+        });
         const limiteTotal = cardData.reduce((sum,x)=>sum+Number(x.card.credit_limit||0),0);
         const comprometido = cardData.reduce((sum,x)=>sum+x.committed,0);
         const disponivelCredito = cardData.reduce((sum,x)=>sum+x.available,0);
         const disponivelReal = saldo - comprometido;
-        return { entradasMes, saidasMes, saldo, monthly, categorias, investido, carteira, limiteTotal, comprometido, disponivelCredito, disponivelReal, cardData };
-    }, [transactions, investments]);
+        const disponivelBeneficios = benefitData.reduce((sum,x)=>sum+x.available,0);
+        const gastoDebitoMes = transactions.filter(t=>t.payment_method==='debito' && t.type==='saida' && monthKey(t.date)===month).reduce((sum,t)=>sum+Number(t.amount||0),0);
+        return { entradasMes, saidasMes, saldo, monthly, categorias, investido, carteira, limiteTotal, comprometido, disponivelCredito, disponivelReal, cardData, benefitData, disponivelBeneficios, gastoDebitoMes };
+    }, [transactions, investments, cards, purchases, invoices, accounts]);
 
     const loading = !stats;
     const firstName = (user?.name || '').split(' ')[0];
@@ -222,6 +232,14 @@ export default function DashboardPage() {
                                     </span>
                                 </p>
                             </Link>
+                        </section>
+                    </Reveal>
+
+                    <Reveal delay={0.1}>
+                        <section className="mt-4 grid gap-4 sm:grid-cols-3">
+                            <div className="rounded-xl border border-border bg-card p-5"><p className="text-xs uppercase tracking-widest text-muted-foreground">Disponível real</p><p className="mt-2 text-2xl font-bold">{formatBRL(stats.disponivelReal)}</p><p className="mt-1 text-xs text-muted-foreground">caixa menos compromissos do crédito</p></div>
+                            <div className="rounded-xl border border-border bg-card p-5"><p className="text-xs uppercase tracking-widest text-muted-foreground">Benefícios disponíveis</p><p className="mt-2 text-2xl font-bold text-positive">{formatBRL(stats.disponivelBeneficios)}</p><p className="mt-1 text-xs text-muted-foreground">alimentação, refeição e outros</p></div>
+                            <div className="rounded-xl border border-border bg-card p-5"><p className="text-xs uppercase tracking-widest text-muted-foreground">Gasto no débito</p><p className="mt-2 text-2xl font-bold">{formatBRL(stats.gastoDebitoMes)}</p><p className="mt-1 text-xs text-muted-foreground">no mês corrente</p></div>
                         </section>
                     </Reveal>
 

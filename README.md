@@ -48,3 +48,6 @@ Quando uma fatura é marcada como paga, o Contrapeso cria uma saída no caixa co
 ## Vercel
 
 O `vercel.json` contém a regra de SPA para que `/login`, `/cadastro`, `/transacoes`, `/investimentos` e `/cartoes` funcionem ao recarregar a página.
+
+## Atualização contas e cartões
+Execute `supabase/schema.sql` no SQL Editor do Supabase antes de publicar esta versão. A migração é compatível com as tabelas existentes e adiciona contas, débito e benefícios.
