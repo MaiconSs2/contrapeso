@@ -3,6 +3,31 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+
+const getSignupErrorMessage = (err) => {
+    const message = String(err?.message || '').toLowerCase();
+    const code = String(err?.code || '').toLowerCase();
+
+    if (code === 'user_already_exists' || message.includes('already registered') || message.includes('already been registered')) {
+        return 'Este e-mail já está cadastrado. Tente entrar com sua conta.';
+    }
+    if (message.includes('password should be at least') || message.includes('password is too short')) {
+        return 'A senha informada é muito curta.';
+    }
+    if (message.includes('invalid email')) {
+        return 'Digite um e-mail válido.';
+    }
+    if (message.includes('signup is disabled') || message.includes('signups not allowed')) {
+        return 'O cadastro de novos usuários está desativado no Supabase.';
+    }
+    if (message.includes('email rate limit') || message.includes('rate limit')) {
+        return 'O limite de tentativas de e-mail foi atingido. Aguarde alguns minutos e tente novamente.';
+    }
+    if (message.includes('network') || message.includes('fetch')) {
+        return 'Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.';
+    }
+    return err?.message || 'Não foi possível criar a conta. Verifique os dados e tente novamente.';
+};
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -15,6 +40,7 @@ export default function SignupPage() {
     const [confirm, setConfirm] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [success, setSuccess] = useState(false);
 
     if (isAuthed) return <Navigate to="/" replace />;
 
@@ -28,15 +54,17 @@ export default function SignupPage() {
         }
         setLoading(true);
         setError('');
+        setSuccess(false);
         try {
             const result = await signup(email.trim(), password, { name: name.trim() });
             if (result?.needsEmailConfirmation) {
-                setError('Conta criada. Verifique seu e-mail para confirmar a conta e depois entre.');
+                setSuccess(true);
                 return;
             }
             navigate('/');
         } catch (err) {
-            setError('Não foi possível criar a conta. Verifique os dados e tente novamente.');
+            console.error('Erro ao criar conta:', err);
+            setError(getSignupErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -116,9 +144,26 @@ export default function SignupPage() {
                             </div>
                         </div>
 
-                        {error && <p className="text-sm font-medium text-negative">{error}</p>}
+                        {error && (
+                            <div className="rounded-lg border border-negative/20 bg-negative/5 p-3 text-sm font-medium text-negative">
+                                {error}
+                            </div>
+                        )}
 
-                        <Button type="submit" disabled={loading} className="h-11 w-full">
+                        {success && (
+                            <div className="rounded-lg border border-positive/20 bg-positive/5 p-4 text-sm">
+                                <p className="font-semibold">Conta criada com sucesso! 🎉</p>
+                                <p className="mt-1 text-muted-foreground">
+                                    Enviamos um link de confirmação para <strong>{email.trim()}</strong>.
+                                    Confirme seu e-mail e depois volte para entrar no Contrapeso.
+                                </p>
+                                <Link to="/login" className="mt-3 inline-block font-semibold underline decoration-2 underline-offset-4">
+                                    Ir para o login
+                                </Link>
+                            </div>
+                        )}
+
+                        <Button type="submit" disabled={loading || success} className="h-11 w-full">
                             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Criar conta
                         </Button>
