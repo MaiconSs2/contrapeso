@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ArrowDownLeft, ArrowUpRight, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import pb from '@/lib/pocketbaseClient';
@@ -20,18 +21,20 @@ import {
     formatBRL,
     formatDateBR,
     monthKey,
+    monthLabel,
 } from '@/lib/finance';
 
 const ALL_CATEGORIES = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
 
 export default function TransactionsPage() {
+    const [searchParams] = useSearchParams();
     const [transactions, setTransactions] = useState(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [query, setQuery] = useState('');
-    const [typeFilter, setTypeFilter] = useState('all');
+    const [typeFilter, setTypeFilter] = useState(searchParams.get('tipo') || 'all');
     const [categoryFilter, setCategoryFilter] = useState('all');
-    const [monthFilter, setMonthFilter] = useState('');
+    const [monthFilter, setMonthFilter] = useState(searchParams.get('mes') || '');
 
     useEffect(() => {
         pb.collection('transactions')
@@ -110,6 +113,25 @@ export default function TransactionsPage() {
                     </Button>
                 </header>
             </Reveal>
+
+            {(searchParams.get('tipo') || searchParams.get('mes')) && (typeFilter !== 'all' || monthFilter) && (
+                <Reveal delay={0.04}>
+                    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-muted px-4 py-2.5 text-sm">
+                        <span className="text-muted-foreground">Mostrando</span>
+                        <span className="font-semibold">
+                            {typeFilter === 'entrada' ? 'entradas' : typeFilter === 'saida' ? 'saídas' : 'tudo'}
+                            {monthFilter ? ` de ${monthLabel(monthFilter)}` : ''}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => { setTypeFilter('all'); setMonthFilter(''); }}
+                            className="ml-auto font-semibold underline decoration-accent decoration-2 underline-offset-4"
+                        >
+                            Limpar filtro
+                        </button>
+                    </div>
+                </Reveal>
+            )}
 
             <Reveal delay={0.08}>
                 <div className="grid gap-3 rounded-xl border border-border bg-card p-4 md:grid-cols-4">
@@ -254,6 +276,7 @@ export default function TransactionsPage() {
                 onOpenChange={setDialogOpen}
                 transaction={editing}
                 onSaved={handleSaved}
+                transactions={transactions}
             />
         </div>
     );

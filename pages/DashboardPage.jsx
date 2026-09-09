@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowDownLeft, ArrowUpRight, PiggyBank, Wallet, CreditCard } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, PiggyBank, Wallet, CreditCard, X } from 'lucide-react';
 import {
     Bar,
     BarChart,
@@ -26,6 +26,55 @@ import {
     monthKey,
     monthLabel,
 } from '@/lib/finance';
+
+const INTRO_KEY = 'contrapeso:intro-dismissed';
+
+function IntroPanel() {
+    const [dismissed, setDismissed] = useState(true);
+
+    useEffect(() => {
+        setDismissed(localStorage.getItem(INTRO_KEY) === '1');
+    }, []);
+
+    if (dismissed) return null;
+
+    const close = () => {
+        localStorage.setItem(INTRO_KEY, '1');
+        setDismissed(true);
+    };
+
+    return (
+        <Reveal>
+            <div className="relative mb-6 rounded-xl border border-border bg-card p-5">
+                <button
+                    type="button"
+                    onClick={close}
+                    aria-label="Fechar"
+                    className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                    <X className="h-4 w-4" />
+                </button>
+                <h2 className="font-serif text-xl italic">Como funciona, em 3 passos</h2>
+                <ol className="mt-3 space-y-2 text-sm text-muted-foreground">
+                    <li>
+                        <strong className="text-foreground">1. Lance suas entradas e saídas</strong> em{' '}
+                        <Link to="/transacoes" className="underline decoration-accent decoration-2 underline-offset-4">Transações</Link>.
+                        Toda vez que dinheiro entra ou sai de verdade (Pix, dinheiro, débito), registre aqui.
+                    </li>
+                    <li>
+                        <strong className="text-foreground">2. Cadastre seus cartões</strong> em{' '}
+                        <Link to="/cartoes" className="underline decoration-accent decoration-2 underline-offset-4">Cartões</Link>.
+                        Crédito tem limite e fatura; débito não precisa cadastro, ele já usa seu saldo.
+                    </li>
+                    <li>
+                        <strong className="text-foreground">3. Acompanhe aqui</strong> o quanto você tem, quanto já
+                        entrou e saiu no mês, e para onde o dinheiro está indo.
+                    </li>
+                </ol>
+            </div>
+        </Reveal>
+    );
+}
 
 export default function DashboardPage() {
     const { user } = useAuth();
@@ -160,7 +209,7 @@ export default function DashboardPage() {
         const disponivelReal = saldo - comprometido;
         const disponivelBeneficios = benefitData.reduce((sum,x)=>sum+x.available,0);
         const gastoDebitoMes = transactions.filter(t=>t.payment_method==='debito' && t.type==='saida' && monthKey(t.date)===month).reduce((sum,t)=>sum+Number(t.amount||0),0);
-        return { entradasMes, saidasMes, saldo, monthly, categorias, investido, carteira, limiteTotal, comprometido, disponivelCredito, disponivelReal, cardData, benefitData, disponivelBeneficios, gastoDebitoMes };
+        return { month, entradasMes, saidasMes, saldo, monthly, categorias, investido, carteira, limiteTotal, comprometido, disponivelCredito, disponivelReal, cardData, benefitData, disponivelBeneficios, gastoDebitoMes };
     }, [transactions, investments, cards, purchases, invoices, accounts]);
 
     const loading = !stats;
@@ -186,6 +235,8 @@ export default function DashboardPage() {
                 </header>
             </Reveal>
 
+            {!loading && <IntroPanel />}
+
             {loading ? (
                 <div className="grid gap-4 md:grid-cols-4">
                     {[0, 1, 2, 3].map((i) => (
@@ -204,7 +255,7 @@ export default function DashboardPage() {
                                     {formatBRL(stats.saldo)}
                                 </p>
                                 <p className="mt-1 text-xs text-primary-foreground/60">
-                                    entradas menos saídas, desde o início
+                                    tudo que entrou menos tudo que saiu (dinheiro, conta e débito)
                                 </p>
                             </div>
                             <Link to="/cartoes" className="group rounded-xl border border-border bg-card p-5 transition-colors hover:border-foreground/40">
@@ -212,30 +263,38 @@ export default function DashboardPage() {
                                     <CreditCard className="h-4 w-4" /> Crédito comprometido
                                 </div>
                                 <p className="mt-3 text-3xl font-bold">{formatBRL(stats.comprometido)}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">Disponível nos cartões: {formatBRL(stats.disponivelCredito)}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">quanto você já gastou no crédito e ainda vai pagar</p>
                             </Link>
-                            <div className="rounded-xl border border-border bg-card p-5">
+                            <Link
+                                to={`/transacoes?tipo=entrada&mes=${stats.month}`}
+                                className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-foreground/40"
+                            >
                                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                                     <ArrowUpRight className="h-4 w-4 text-positive" /> Entradas no mês
                                 </div>
                                 <p className="mt-3 text-3xl font-bold text-positive">
                                     {formatBRL(stats.entradasMes)}
                                 </p>
-                            </div>
-                            <div className="rounded-xl border border-border bg-card p-5">
+                                <p className="mt-1 text-xs text-muted-foreground">toque para ver os lançamentos</p>
+                            </Link>
+                            <Link
+                                to={`/transacoes?tipo=saida&mes=${stats.month}`}
+                                className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-foreground/40"
+                            >
                                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                                     <ArrowDownLeft className="h-4 w-4 text-negative" /> Saídas no mês
                                 </div>
                                 <p className="mt-3 text-3xl font-bold text-negative">
                                     {formatBRL(stats.saidasMes)}
                                 </p>
-                            </div>
+                                <p className="mt-1 text-xs text-muted-foreground">toque para ver o que você gastou</p>
+                            </Link>
                             <Link
                                 to="/investimentos"
                                 className="group rounded-xl border border-border bg-card p-5 transition-colors hover:border-foreground/40"
                             >
                                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                                    <PiggyBank className="h-4 w-4" /> Carteira
+                                    <PiggyBank className="h-4 w-4" /> Investimentos
                                 </div>
                                 <p className="mt-3 text-3xl font-bold">{formatBRL(stats.carteira)}</p>
                                 <p className="mt-1 text-xs text-muted-foreground">
@@ -250,9 +309,9 @@ export default function DashboardPage() {
 
                     <Reveal delay={0.1}>
                         <section className="mt-4 grid gap-4 sm:grid-cols-3">
-                            <div className="rounded-xl border border-border bg-card p-5"><p className="text-xs uppercase tracking-widest text-muted-foreground">Disponível real</p><p className="mt-2 text-2xl font-bold">{formatBRL(stats.disponivelReal)}</p><p className="mt-1 text-xs text-muted-foreground">caixa menos compromissos do crédito</p></div>
-                            <div className="rounded-xl border border-border bg-card p-5"><p className="text-xs uppercase tracking-widest text-muted-foreground">Benefícios disponíveis</p><p className="mt-2 text-2xl font-bold text-positive">{formatBRL(stats.disponivelBeneficios)}</p><p className="mt-1 text-xs text-muted-foreground">alimentação, refeição e outros</p></div>
-                            <div className="rounded-xl border border-border bg-card p-5"><p className="text-xs uppercase tracking-widest text-muted-foreground">Gasto no débito</p><p className="mt-2 text-2xl font-bold">{formatBRL(stats.gastoDebitoMes)}</p><p className="mt-1 text-xs text-muted-foreground">no mês corrente</p></div>
+                            <div className="rounded-xl border border-border bg-card p-5"><p className="text-xs uppercase tracking-widest text-muted-foreground">Disponível real</p><p className="mt-2 text-2xl font-bold">{formatBRL(stats.disponivelReal)}</p><p className="mt-1 text-xs text-muted-foreground">seu saldo já descontando o que está comprometido no crédito</p></div>
+                            <div className="rounded-xl border border-border bg-card p-5"><p className="text-xs uppercase tracking-widest text-muted-foreground">Benefícios disponíveis</p><p className="mt-2 text-2xl font-bold text-positive">{formatBRL(stats.disponivelBeneficios)}</p><p className="mt-1 text-xs text-muted-foreground">alimentação, refeição e outros vales</p></div>
+                            <div className="rounded-xl border border-border bg-card p-5"><p className="text-xs uppercase tracking-widest text-muted-foreground">Gasto no débito</p><p className="mt-2 text-2xl font-bold">{formatBRL(stats.gastoDebitoMes)}</p><p className="mt-1 text-xs text-muted-foreground">no mês corrente, já incluído no saldo atual</p></div>
                         </section>
                     </Reveal>
 

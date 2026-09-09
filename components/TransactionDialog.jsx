@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, parseAmount, todayInput } from '@/lib/finance';
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, formatBRL, parseAmount, sumBalance, todayInput } from '@/lib/finance';
 
-const typeLabel = { credito: 'Cartão de crédito', debito: 'Cartão de débito', alimentacao: 'Alimentação', refeicao: 'Refeição', beneficio: 'Benefício' };
+// Formas de pagamento que saem direto do seu saldo (dinheiro que você já tem).
+const DIRECT_METHODS = ['conta', 'debito'];
 
-export default function TransactionDialog({ open, onOpenChange, transaction, onSaved }) {
+export default function TransactionDialog({ open, onOpenChange, transaction, onSaved, transactions }) {
   const [type, setType] = useState('entrada');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
@@ -19,18 +20,13 @@ export default function TransactionDialog({ open, onOpenChange, transaction, onS
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('conta');
   const [cardId, setCardId] = useState('');
-  const [accountId, setAccountId] = useState('');
   const [installments, setInstallments] = useState('1');
   const [cards, setCards] = useState([]);
-  const [accounts, setAccounts] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    Promise.all([
-      pb.collection('credit_cards').getFullList({ sort: 'name' }),
-      pb.collection('accounts').getFullList({ sort: 'name' }),
-    ]).then(([c, a]) => { setCards(c); setAccounts(a); }).catch(() => {});
+    pb.collection('credit_cards').getFullList({ sort: 'name' }).then(setCards).catch(() => {});
 
     if (transaction) {
       setType(transaction.type);
@@ -41,30 +37,40 @@ export default function TransactionDialog({ open, onOpenChange, transaction, onS
       setNotes(transaction.notes || '');
       setPaymentMethod(transaction.payment_method || 'conta');
       setCardId(transaction.card_id || '');
-      setAccountId(transaction.account_id || '');
       setInstallments(String(transaction.installments || 1));
     } else {
       setType('entrada'); setDescription(''); setAmount(''); setCategory('outros'); setDate(todayInput());
-      setNotes(''); setPaymentMethod('conta'); setCardId(''); setAccountId(''); setInstallments('1');
+      setNotes(''); setPaymentMethod('conta'); setCardId(''); setInstallments('1');
     }
   }, [open, transaction]);
 
   const selectedCard = cards.find(c => c.id === cardId);
-  const cardKind = selectedCard?.card_type;
   const benefits = cards.filter(c => ['alimentacao', 'refeicao', 'beneficio'].includes(c.card_type));
   const installmentCount = Math.max(1, Number(installments) || 1);
   const numericAmount = parseAmount(amount);
   const installmentValue = useMemo(() => Number.isFinite(numericAmount) ? numericAmount / installmentCount : 0, [numericAmount, installmentCount]);
 
+  // Quanto dinheiro você realmente tem disponível agora, considerando o que já
+  // está lançado. Se você está editando um gasto que já saía do saldo, devolve
+  // o valor antigo antes de comparar, pra não travar por causa dele mesmo.
+  const availableBalance = useMemo(() => {
+    const base = sumBalance(transactions);
+    const wasDirect = transaction && transaction.type === 'saida' && DIRECT_METHODS.includes(transaction.payment_method);
+    return wasDirect ? base + Number(transaction.amount || 0) : base;
+  }, [transactions, transaction]);
+
+  const isDirect = type === 'saida' && DIRECT_METHODS.includes(paymentMethod);
+
   const submit = async (e) => {
     e.preventDefault();
     if (!description.trim() || !Number.isFinite(numericAmount) || numericAmount <= 0) return toast.error('Informe descrição e um valor válido.');
     if (type === 'saida' && paymentMethod === 'cartao' && !cardId) return toast.error('Selecione o cartão de crédito.');
-    if (type === 'saida' && paymentMethod === 'debito' && !cardId) return toast.error('Selecione o cartão de débito.');
     if (type === 'saida' && paymentMethod === 'beneficio' && !cardId) return toast.error('Selecione o cartão de benefício.');
-    if (type === 'saida' && paymentMethod === 'conta' && !accountId && accounts.length) return toast.error('Selecione a conta.');
     if (paymentMethod === 'cartao' && selectedCard?.card_type !== 'credito') return toast.error('Selecione um cartão de crédito.');
     if (paymentMethod === 'cartao' && (!Number.isInteger(installmentCount) || installmentCount < 1 || installmentCount > 60)) return toast.error('As parcelas devem estar entre 1 e 60.');
+    if (isDirect && numericAmount > availableBalance) {
+      return toast.error(`Saldo insuficiente. Você tem ${formatBRL(availableBalance)} disponível.`);
+    }
 
     setSaving(true);
     let purchase = null;
@@ -104,9 +110,9 @@ export default function TransactionDialog({ open, onOpenChange, transaction, onS
         date,
         notes: notes.trim(),
         payment_method: paymentMethod,
-        card_id: ['cartao', 'debito', 'beneficio'].includes(paymentMethod) ? cardId : null,
+        card_id: (paymentMethod === 'cartao' || paymentMethod === 'beneficio') ? cardId : null,
         card_purchase_id: purchase?.id || null,
-        account_id: (paymentMethod === 'conta' || paymentMethod === 'debito') ? accountId || selectedCard?.account_id || null : null,
+        account_id: null,
       };
 
       const rec = await pb.collection('transactions').create(payload);
@@ -140,19 +146,41 @@ export default function TransactionDialog({ open, onOpenChange, transaction, onS
             <div className="space-y-2"><Label>Categoria</Label><Select value={category} onValueChange={setCategory}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(type === 'entrada' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
           </div>
 
-          {type === 'saida' && <div className="space-y-2"><Label>Forma de pagamento</Label><Select value={paymentMethod} onValueChange={v => { setPaymentMethod(v); setCardId(''); setInstallments('1'); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="conta">Conta / dinheiro</SelectItem><SelectItem value="cartao">Cartão de crédito</SelectItem><SelectItem value="debito">Cartão de débito</SelectItem><SelectItem value="beneficio">Alimentação / refeição / benefício</SelectItem></SelectContent></Select></div>}
+          {type === 'saida' && <div className="space-y-2">
+            <Label>Forma de pagamento</Label>
+            <Select value={paymentMethod} onValueChange={v => { setPaymentMethod(v); setCardId(''); setInstallments('1'); }}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="conta">Dinheiro / conta</SelectItem>
+                <SelectItem value="debito">Cartão de débito</SelectItem>
+                <SelectItem value="cartao">Cartão de crédito</SelectItem>
+                <SelectItem value="beneficio">Alimentação / refeição / benefício</SelectItem>
+              </SelectContent>
+            </Select>
+            {isDirect && (
+              <p className={`text-xs ${numericAmount > availableBalance ? 'font-semibold text-negative' : 'text-muted-foreground'}`}>
+                Saldo disponível: {formatBRL(availableBalance)}
+                {numericAmount > availableBalance ? ' — esse valor é maior do que você tem.' : ''}
+              </p>
+            )}
+          </div>}
 
-          {type === 'saida' && paymentMethod === 'conta' && accounts.length > 0 && <div className="space-y-2"><Label>Conta</Label><Select value={accountId} onValueChange={setAccountId}><SelectTrigger><SelectValue placeholder="Selecione a conta" /></SelectTrigger><SelectContent>{accounts.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent></Select></div>}
-
-          {type === 'saida' && (paymentMethod === 'cartao' || paymentMethod === 'debito') && <div className="space-y-2"><Label>{paymentMethod === 'cartao' ? 'Cartão de crédito' : 'Cartão de débito'}</Label><Select value={cardId} onValueChange={setCardId}><SelectTrigger><SelectValue placeholder="Selecione o cartão" /></SelectTrigger><SelectContent>{cards.filter(c => c.card_type === (paymentMethod === 'cartao' ? 'credito' : 'debito')).map(c => <SelectItem key={c.id} value={c.id}>{c.name} · {c.bank}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">{paymentMethod === 'debito' ? 'O gasto sai da conta vinculada ao cartão e aparece no total gasto nesse débito.' : 'A compra compromete o limite e só reduz o caixa quando a fatura for paga.'}</p></div>}
+          {type === 'saida' && paymentMethod === 'cartao' && <div className="space-y-2">
+            <Label>Cartão de crédito</Label>
+            <Select value={cardId} onValueChange={setCardId}>
+              <SelectTrigger><SelectValue placeholder="Selecione o cartão" /></SelectTrigger>
+              <SelectContent>{cards.filter(c => c.card_type === 'credito').map(c => <SelectItem key={c.id} value={c.id}>{c.name} · {c.bank}</SelectItem>)}</SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">A compra compromete o limite e só reduz o caixa quando a fatura for paga.</p>
+          </div>}
 
           {type === 'saida' && paymentMethod === 'cartao' && <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>Parcelas</Label><Input type="number" min="1" max="60" value={installments} onChange={e => setInstallments(e.target.value)} required /></div>
-            <div className="rounded-lg bg-muted p-3 text-sm"><p className="text-xs text-muted-foreground">Cada parcela</p><p className="mt-1 font-bold">{Number.isFinite(numericAmount) ? installmentValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00'}</p></div>
+            <div className="rounded-lg bg-muted p-3 text-sm"><p className="text-xs text-muted-foreground">Cada parcela</p><p className="mt-1 font-bold">{Number.isFinite(numericAmount) ? formatBRL(installmentValue) : 'R$ 0,00'}</p></div>
           </div>}
 
-          {type === 'saida' && paymentMethod === 'beneficio' && <div className="space-y-2"><Label>Cartão de benefício</Label><Select value={cardId} onValueChange={setCardId}><SelectTrigger><SelectValue placeholder="Selecione o benefício" /></SelectTrigger><SelectContent>{benefits.map(c => <SelectItem key={c.id} value={c.id}>{c.name} · {typeLabel[c.card_type]}</SelectItem>)}</SelectContent></Select></div>}
-          {type === 'saida' && paymentMethod === 'cartao' && selectedCard && <div className="rounded-lg border border-border bg-muted/50 p-3 text-sm"><strong>{installmentCount}x</strong> de <strong>{Number.isFinite(numericAmount) ? installmentValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00'}</strong>. O total de {Number.isFinite(numericAmount) ? numericAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00'} compromete o limite, e as parcelas aparecem nas faturas correspondentes.</div>}
+          {type === 'saida' && paymentMethod === 'beneficio' && <div className="space-y-2"><Label>Cartão de benefício</Label><Select value={cardId} onValueChange={setCardId}><SelectTrigger><SelectValue placeholder="Selecione o benefício" /></SelectTrigger><SelectContent>{benefits.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>}
+          {type === 'saida' && paymentMethod === 'cartao' && selectedCard && <div className="rounded-lg border border-border bg-muted/50 p-3 text-sm"><strong>{installmentCount}x</strong> de <strong>{Number.isFinite(numericAmount) ? formatBRL(installmentValue) : 'R$ 0,00'}</strong>. O total de {Number.isFinite(numericAmount) ? formatBRL(numericAmount) : 'R$ 0,00'} compromete o limite, e as parcelas aparecem nas faturas correspondentes.</div>}
 
           <div className="space-y-2"><Label>Observação (opcional)</Label><Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Detalhes adicionais" /></div>
           <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button type="submit" disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</Button></DialogFooter>
