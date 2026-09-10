@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EXPENSE_CATEGORIES, formatBRL, invoiceMonthForPurchase, parseAmount, todayInput, addMonthsToKey } from '@/lib/finance';
 
-export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, onSaved }) {
+export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, purchase, onSaved }) {
   const [selectedCard, setSelectedCard] = useState(cardId || '');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
@@ -22,17 +22,17 @@ export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, 
 
   useEffect(() => {
     if (open) {
-      setSelectedCard(cardId || cards?.[0]?.id || '');
-      setDescription('');
-      setAmount('');
+      setSelectedCard(purchase?.card_id || cardId || cards?.[0]?.id || '');
+      setDescription(purchase?.description || '');
+      setAmount(purchase ? String(purchase.amount ?? '').replace('.', ',') : '');
       setValueMode('total');
-      setCategory('outros');
-      setDate(todayInput());
-      setInstallments('1');
-      setPaidInstallments('0');
-      setNotes('');
+      setCategory(purchase?.category || 'outros');
+      setDate(purchase?.purchase_date || todayInput());
+      setInstallments(String(purchase?.installments || 1));
+      setPaidInstallments(String(purchase?.paid_installments || 0));
+      setNotes(purchase?.notes || '');
     }
-  }, [open, cardId, cards]);
+  }, [open, cardId, cards, purchase]);
 
   const card = cards.find((c) => c.id === selectedCard);
   const rawValue = parseAmount(amount);
@@ -79,7 +79,7 @@ export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, 
     setSaving(true);
 
     try {
-      const rec = await pb.collection('card_purchases').create({
+      const payload = {
         card_id: selectedCard,
         description: description.trim(),
         amount: Number(totalValue.toFixed(2)),
@@ -88,11 +88,14 @@ export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, 
         installments: count,
         paid_installments: paidCount,
         notes: notes.trim(),
-      });
+      };
+      const rec = purchase
+        ? await pb.collection('card_purchases').update(purchase.id, payload)
+        : await pb.collection('card_purchases').create(payload);
 
       onSaved(rec);
       onOpenChange(false);
-      toast.success(count > 1 ? `Compra registrada em ${count}x.` : 'Compra adicionada à fatura.');
+      toast.success(purchase ? 'Compra atualizada.' : (count > 1 ? `Compra registrada em ${count}x.` : 'Compra adicionada à fatura.'));
     } catch (err) {
       console.error(err);
       toast.error(err?.message || 'Não foi possível salvar a compra.');
@@ -105,7 +108,7 @@ export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Nova compra no cartão</DialogTitle>
+          <DialogTitle>{purchase ? 'Editar compra no cartão' : 'Nova compra no cartão'}</DialogTitle>
           <DialogDescription>
             Registre uma compra atual ou uma compra antiga para manter o histórico e as parcelas sob controle.
           </DialogDescription>
@@ -224,7 +227,7 @@ export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button type="submit" disabled={saving || cards.length === 0}>
-              {saving ? 'Salvando…' : 'Adicionar compra'}
+              {saving ? 'Salvando…' : purchase ? 'Salvar alterações' : 'Adicionar compra'}
             </Button>
           </DialogFooter>
         </form>

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import pb from '@/lib/pocketbaseClient';
 import Reveal from '@/components/Reveal';
 import TransactionDialog from '@/components/TransactionDialog';
+import CardPurchaseDialog from '@/components/CardPurchaseDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -36,6 +37,8 @@ export default function TransactionsPage() {
     const [purchases, setPurchases] = useState([]);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editing, setEditing] = useState(null);
+    const [editingPurchase, setEditingPurchase] = useState(null);
+    const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [typeFilter, setTypeFilter] = useState(searchParams.get('tipo') || 'all');
     const [categoryFilter, setCategoryFilter] = useState('all');
@@ -125,14 +128,65 @@ export default function TransactionsPage() {
     };
 
     const handleDelete = async (t) => {
+        if (t.virtualInstallment) {
+            const purchase = purchases.find((p) => p.id === t.card_purchase_id);
+            if (!purchase) return toast.error('Compra parcelada não encontrada.');
+            if (!window.confirm(`Excluir a compra "${purchase.description}" e todas as suas parcelas?`)) return;
+            try {
+                const parent = transactions?.find((x) => x.card_purchase_id === purchase.id);
+                if (parent) await pb.collection('transactions').delete(parent.id);
+                await pb.collection('card_purchases').delete(purchase.id);
+                await loadData();
+                toast.success('Compra parcelada excluída.');
+            } catch (err) {
+                console.error(err);
+                toast.error(err?.message || 'Não foi possível excluir a compra.');
+            }
+            return;
+        }
         if (!window.confirm(`Excluir "${t.description}"?`)) return;
         try {
             await pb.collection('transactions').delete(t.id);
             setTransactions((prev) => prev.filter((x) => x.id !== t.id));
             toast.success('Transação excluída.');
         } catch (err) {
-            toast.error('Não foi possível excluir.');
+            console.error(err);
+            toast.error(err?.message || 'Não foi possível excluir.');
         }
+    };
+
+    const handleEdit = (t) => {
+        if (t.virtualInstallment) {
+            const purchase = purchases.find((p) => p.id === t.card_purchase_id);
+            if (!purchase) return toast.error('Compra parcelada não encontrada.');
+            setEditingPurchase(purchase);
+            setPurchaseDialogOpen(true);
+            return;
+        }
+        setEditing(t);
+        setDialogOpen(true);
+    };
+
+    const handlePurchaseSaved = async (rec) => {
+        try {
+            const parent = transactions?.find((x) => x.card_purchase_id === rec.id);
+            if (parent) {
+                await pb.collection('transactions').update(parent.id, {
+                    description: rec.description,
+                    amount: rec.amount,
+                    category: rec.category,
+                    date: rec.purchase_date,
+                    notes: rec.notes || '',
+                    card_id: rec.card_id,
+                    card_purchase_id: rec.id,
+                    payment_method: 'cartao',
+                });
+            }
+        } catch (err) {
+            console.error('Falha ao sincronizar a transação da compra', err);
+        }
+        setEditingPurchase(null);
+        await loadData();
     };
 
     return (
@@ -294,9 +348,7 @@ export default function TransactionsPage() {
                                             type="button"
                                             aria-label="Editar transação"
                                             onClick={() => {
-                                                if (t.virtualInstallment) return;
-                                                setEditing(t);
-                                                setDialogOpen(true);
+                                                handleEdit(t);
                                             }}
                                             className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                         >
@@ -305,7 +357,7 @@ export default function TransactionsPage() {
                                         <button
                                             type="button"
                                             aria-label="Excluir transação"
-                                            onClick={() => { if (t.virtualInstallment) return; handleDelete(t); }}
+                                            onClick={() => handleDelete(t)}
                                             className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-negative/10 hover:text-negative"
                                         >
                                             <Trash2 className="h-4 w-4" />
@@ -324,6 +376,14 @@ export default function TransactionsPage() {
                 transaction={editing}
                 onSaved={handleSaved}
                 transactions={transactions}
+            />
+            <CardPurchaseDialog
+                open={purchaseDialogOpen}
+                onOpenChange={(open) => { setPurchaseDialogOpen(open); if (!open) setEditingPurchase(null); }}
+                cards={cards.filter((c) => c.card_type === 'credito')}
+                cardId={editingPurchase?.card_id || ''}
+                purchase={editingPurchase}
+                onSaved={handlePurchaseSaved}
             />
         </div>
     );
