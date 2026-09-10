@@ -18,7 +18,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import Reveal from '@/components/Reveal';
 import {
     CATEGORY_LABELS,
-    installmentInvoiceMonths,
+    remainingInstallmentInvoiceMonths,
+    installmentAmounts,
     CHART_COLORS,
     currentMonthKey,
     formatBRL,
@@ -167,14 +168,16 @@ export default function DashboardPage() {
             const isCredit = (card?.card_type || 'credito') === 'credito';
             const linked = transactions.some(t => t.card_purchase_id === purchase.id);
             if (isCredit && card?.closing_day) {
-                const each = Number(purchase.amount || 0) / Math.max(1, Number(purchase.installments || 1));
-                installmentInvoiceMonths(purchase, card.closing_day).forEach((purchaseMonth) => {
+                const amounts = installmentAmounts(purchase.amount, purchase.installments);
+                remainingInstallmentInvoiceMonths(purchase, card.closing_day).forEach((purchaseMonth, index) => {
+                    const offset = Math.max(0, Number(purchase.paid_installments || 0));
+                    const value = amounts[offset + index] || 0;
                     const row = monthly.find((m) => m.key === purchaseMonth);
                     if (purchaseMonth === month) {
-                        saidasMes += each;
-                        byCategory[purchase.category] = (byCategory[purchase.category] || 0) + each;
+                        saidasMes += value;
+                        byCategory[purchase.category] = (byCategory[purchase.category] || 0) + value;
                     }
-                    if (row) row.saidas += each;
+                    if (row) row.saidas += value;
                 });
             } else if (!linked) {
                 const purchaseMonth = monthKey(purchase.purchase_date);
@@ -203,8 +206,9 @@ export default function DashboardPage() {
         const cardData = cards.filter(card => (card.card_type || 'credito') === 'credito').map(card => {
             const paid = new Set(invoices.filter(i => i.card_id === card.id && i.status === 'paid').map(i => i.reference_month));
             const installments = purchases.filter(p => p.card_id === card.id).flatMap(p => {
-                const each = Number(p.amount || 0) / Math.max(1, Number(p.installments || 1));
-                return installmentInvoiceMonths(p, card.closing_day).map((month, index) => ({ month, value: each, index }));
+                const amounts = installmentAmounts(p.amount, p.installments);
+                const offset = Math.max(0, Number(p.paid_installments || 0));
+                return remainingInstallmentInvoiceMonths(p, card.closing_day).map((month, index) => ({ month, value: amounts[offset + index] || 0, index: offset + index }));
             });
             const committed = installments.filter(x => !paid.has(x.month)).reduce((sum,x)=>sum+x.value,0);
             return { card, committed, available: Math.max(0, Number(card.credit_limit || 0) - committed) };

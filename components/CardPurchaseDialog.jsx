@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { EXPENSE_CATEGORIES, formatBRL, invoiceMonthForPurchase, parseAmount, todayInput } from '@/lib/finance';
+import { EXPENSE_CATEGORIES, formatBRL, invoiceMonthForPurchase, parseAmount, todayInput, addMonthsToKey } from '@/lib/finance';
 
 export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, onSaved }) {
   const [selectedCard, setSelectedCard] = useState(cardId || '');
@@ -16,6 +16,7 @@ export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, 
   const [category, setCategory] = useState('outros');
   const [date, setDate] = useState(todayInput());
   const [installments, setInstallments] = useState('1');
+  const [paidInstallments, setPaidInstallments] = useState('0');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -28,6 +29,7 @@ export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, 
       setCategory('outros');
       setDate(todayInput());
       setInstallments('1');
+      setPaidInstallments('0');
       setNotes('');
     }
   }, [open, cardId, cards]);
@@ -35,6 +37,8 @@ export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, 
   const card = cards.find((c) => c.id === selectedCard);
   const rawValue = parseAmount(amount);
   const count = Math.max(1, Number(installments) || 1);
+  const paidCount = Math.min(count, Math.max(0, Number(paidInstallments) || 0));
+  const remainingCount = Math.max(0, count - paidCount);
 
   const totalValue = useMemo(() => {
     if (!Number.isFinite(rawValue)) return 0;
@@ -47,6 +51,7 @@ export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, 
   }, [rawValue, valueMode, count]);
 
   const firstInvoice = card && date ? invoiceMonthForPurchase(date, card.closing_day) : '';
+  const firstRemainingInvoice = firstInvoice && paidCount > 0 ? addMonthsToKey(firstInvoice, paidCount) : firstInvoice;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -62,7 +67,11 @@ export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, 
       totalValue <= 0 ||
       !Number.isInteger(count) ||
       count < 1 ||
-      count > 60
+      count > 60 ||
+      !Number.isInteger(paidCount) ||
+      paidCount < 0 ||
+      paidCount > count ||
+      paidCount === count
     ) {
       return toast.error('Preencha os dados da compra corretamente.');
     }
@@ -77,6 +86,7 @@ export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, 
         category,
         purchase_date: date,
         installments: count,
+        paid_installments: paidCount,
         notes: notes.trim(),
       });
 
@@ -177,10 +187,27 @@ export default function CardPurchaseDialog({ open, onOpenChange, cards, cardId, 
             </div>
           </div>
 
+          {count > 1 && (
+            <div className="space-y-2">
+              <Label>Parcelas já pagas</Label>
+              <Input
+                type="number"
+                min="0"
+                max={count - 1}
+                value={paidInstallments}
+                onChange={(e) => setPaidInstallments(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Se esta é uma compra antiga, informe quantas parcelas já foram pagas. O Contrapeso lançará somente as restantes.
+              </p>
+            </div>
+          )}
+
           <div className="rounded-lg bg-muted p-3 text-sm">
             {card ? (
               <>
-                <p>1ª fatura: <strong>{firstInvoice}</strong></p>
+                <p>1ª fatura: <strong>{firstRemainingInvoice}</strong></p>
+                <p className="mt-1">Restantes: <strong>{remainingCount}</strong> parcela(s)</p>
                 <p className="mt-1">Total registrado: <strong>{formatBRL(totalValue)}</strong></p>
                 <p className="mt-1">Cada parcela: <strong>{formatBRL(installmentValue)}</strong></p>
               </>

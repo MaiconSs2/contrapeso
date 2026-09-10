@@ -22,6 +22,9 @@ import {
     formatDateBR,
     monthKey,
     monthLabel,
+    remainingInstallmentInvoiceMonths,
+    installmentAmounts,
+    invoiceDueDate,
 } from '@/lib/finance';
 
 const ALL_CATEGORIES = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
@@ -29,6 +32,8 @@ const ALL_CATEGORIES = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
 export default function TransactionsPage() {
     const [searchParams] = useSearchParams();
     const [transactions, setTransactions] = useState(null);
+    const [cards, setCards] = useState([]);
+    const [purchases, setPurchases] = useState([]);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [query, setQuery] = useState('');
@@ -36,32 +41,69 @@ export default function TransactionsPage() {
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [monthFilter, setMonthFilter] = useState(searchParams.get('mes') || '');
 
+    const loadData = async () => {
+        const [tx, cs, ps] = await Promise.all([
+            pb.collection('transactions').getFullList({ sort: '-date' }),
+            pb.collection('credit_cards').getFullList({ sort: 'name' }),
+            pb.collection('card_purchases').getFullList({ sort: '-purchase_date' }),
+        ]);
+        setTransactions(tx);
+        setCards(cs);
+        setPurchases(ps);
+    };
+
     useEffect(() => {
-        pb.collection('transactions')
-            .getFullList({ sort: '-date' })
-            .then(setTransactions)
-            .catch((err) => {
-                console.error('Falha ao carregar transações', err);
-                setTransactions([]);
-            });
+        loadData().catch((err) => {
+            console.error('Falha ao carregar transações', err);
+            setTransactions([]);
+            setCards([]);
+            setPurchases([]);
+        });
     }, []);
+
+    const virtualCreditInstallments = useMemo(() => {
+        return purchases.flatMap((purchase) => {
+            const card = cards.find((c) => c.id === purchase.card_id);
+            if (!card || (card.card_type || 'credito') !== 'credito' || !card.closing_day) return [];
+            const months = remainingInstallmentInvoiceMonths(purchase, card.closing_day);
+            const amounts = installmentAmounts(purchase.amount, purchase.installments);
+            const offset = Math.max(0, Number(purchase.paid_installments || 0));
+            return months.map((referenceMonth, index) => ({
+                id: `installment-${purchase.id}-${offset + index + 1}`,
+                type: 'saida',
+                description: purchase.description,
+                installment: offset + index + 1,
+                amount: amounts[offset + index] || 0,
+                category: purchase.category,
+                date: invoiceDueDate(referenceMonth, card.due_day),
+                notes: `${offset + index + 1}/${Number(purchase.installments || 1)} · ${card.name}`,
+                payment_method: 'cartao',
+                card_id: card.id,
+                card_purchase_id: purchase.id,
+                virtualInstallment: true,
+            }));
+        });
+    }, [purchases, cards]);
 
     const filtered = useMemo(() => {
         if (!transactions) return [];
-        return transactions.filter((t) => {
-            if (typeFilter !== 'all' && t.type !== typeFilter) return false;
-            if (categoryFilter !== 'all' && t.category !== categoryFilter) return false;
-            if (monthFilter && monthKey(t.date) !== monthFilter) return false;
-            if (query && !t.description.toLowerCase().includes(query.toLowerCase())) return false;
-            return true;
-        });
-    }, [transactions, typeFilter, categoryFilter, monthFilter, query]);
+        const real = transactions.filter((t) => !(t.type === 'saida' && t.payment_method === 'cartao' && t.card_purchase_id));
+        return [...real, ...virtualCreditInstallments]
+            .filter((t) => {
+                if (typeFilter !== 'all' && t.type !== typeFilter) return false;
+                if (categoryFilter !== 'all' && t.category !== categoryFilter) return false;
+                if (monthFilter && monthKey(t.date) !== monthFilter) return false;
+                if (query && !t.description.toLowerCase().includes(query.toLowerCase())) return false;
+                return true;
+            })
+            .sort((a, b) => (a.date < b.date ? 1 : -1));
+    }, [transactions, virtualCreditInstallments, typeFilter, categoryFilter, monthFilter, query]);
 
     const totals = useMemo(
         () =>
             filtered.reduce(
                 (acc, t) => {
-                    acc[t.type === 'entrada' ? 'entradas' : 'saidas'] += t.amount;
+                    acc[t.type === 'entrada' ? 'entradas' : 'saidas'] += Number(t.amount || 0);
                     return acc;
                 },
                 { entradas: 0, saidas: 0 },
@@ -70,6 +112,10 @@ export default function TransactionsPage() {
     );
 
     const handleSaved = (rec) => {
+        if (rec?.payment_method === 'cartao' && rec?.card_purchase_id) {
+            loadData().catch((err) => console.error('Falha ao atualizar parcelas', err));
+            return;
+        }
         setTransactions((prev) => {
             const list = prev || [];
             const exists = list.some((x) => x.id === rec.id);
@@ -248,6 +294,7 @@ export default function TransactionsPage() {
                                             type="button"
                                             aria-label="Editar transação"
                                             onClick={() => {
+                                                if (t.virtualInstallment) return;
                                                 setEditing(t);
                                                 setDialogOpen(true);
                                             }}
@@ -258,7 +305,7 @@ export default function TransactionsPage() {
                                         <button
                                             type="button"
                                             aria-label="Excluir transação"
-                                            onClick={() => handleDelete(t)}
+                                            onClick={() => { if (t.virtualInstallment) return; handleDelete(t); }}
                                             className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-negative/10 hover:text-negative"
                                         >
                                             <Trash2 className="h-4 w-4" />

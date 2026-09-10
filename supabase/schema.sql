@@ -51,7 +51,8 @@ create table if not exists public.card_purchases (
   id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade,
   card_id uuid not null references public.credit_cards(id) on delete cascade, description text not null,
   amount numeric(14,2) not null check (amount > 0), category text not null default 'outros', purchase_date date not null,
-  installments integer not null default 1 check (installments between 1 and 60), notes text, created_at timestamptz not null default now()
+  installments integer not null default 1 check (installments between 1 and 60),
+  paid_installments integer not null default 0 check (paid_installments between 0 and installments), notes text, created_at timestamptz not null default now()
 );
 
 create table if not exists public.card_invoices (
