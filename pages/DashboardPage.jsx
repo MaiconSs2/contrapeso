@@ -138,17 +138,27 @@ export default function DashboardPage() {
 
         transactions.forEach((t) => {
             const sign = t.type === 'entrada' ? 1 : -1;
-            // Compras no cartão comprometem crédito, mas só saem do caixa quando a fatura é paga.
+            const isLinkedCreditPurchase = t.type === 'saida'
+                && t.payment_method === 'cartao'
+                && !!t.card_purchase_id;
+
+            // Compras no crédito não são saídas de caixa nem devem entrar novamente
+            // nas saídas do mês: a compra é contabilizada abaixo, parcela por parcela.
             if (!['cartao','beneficio'].includes(t.payment_method)) saldo += sign * Number(t.amount || 0);
-            if (monthKey(t.date) === month) {
-                if (t.type === 'entrada') entradasMes += t.amount;
+
+            // A transação espelho criada ao lançar uma compra no crédito é apenas
+            // referência. O valor real do mês vem das parcelas da card_purchase.
+            if (!isLinkedCreditPurchase && monthKey(t.date) === month) {
+                if (t.type === 'entrada') entradasMes += Number(t.amount || 0);
                 else {
-                    saidasMes += t.amount;
-                    byCategory[t.category] = (byCategory[t.category] || 0) + t.amount;
+                    saidasMes += Number(t.amount || 0);
+                    byCategory[t.category] = (byCategory[t.category] || 0) + Number(t.amount || 0);
                 }
             }
             const row = monthly.find((m) => m.key === monthKey(t.date));
-            if (row) row[t.type === 'entrada' ? 'entradas' : 'saidas'] += t.amount;
+            if (row && !isLinkedCreditPurchase) {
+                row[t.type === 'entrada' ? 'entradas' : 'saidas'] += Number(t.amount || 0);
+            }
         });
 
         // Compras de cartão entram no mês da respectiva parcela, mesmo quando foram lançadas pela tela de Transações.
@@ -258,13 +268,35 @@ export default function DashboardPage() {
                                     tudo que entrou menos tudo que saiu (dinheiro, conta e débito)
                                 </p>
                             </div>
-                            <Link to="/cartoes" className="group rounded-xl border border-border bg-card p-5 transition-colors hover:border-foreground/40">
-                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                                    <CreditCard className="h-4 w-4" /> Crédito comprometido
-                                </div>
-                                <p className="mt-3 text-3xl font-bold">{formatBRL(stats.comprometido)}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">quanto você já gastou no crédito e ainda vai pagar</p>
-                            </Link>
+
+                            {stats.cardData.length > 0 ? stats.cardData.map(({ card, committed }) => (
+                                <Link
+                                    key={card.id}
+                                    to="/cartoes"
+                                    className="group rounded-xl border border-border bg-card p-5 transition-colors hover:border-foreground/40"
+                                >
+                                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                                        <CreditCard className="h-4 w-4" /> Crédito comprometido
+                                    </div>
+                                    <p className="mt-3 truncate text-sm font-semibold">{card.name}</p>
+                                    <p className="mt-1 text-3xl font-bold">{formatBRL(committed)}</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        {card.bank} · limite {formatBRL(card.credit_limit)}
+                                    </p>
+                                </Link>
+                            )) : (
+                                <Link
+                                    to="/cartoes"
+                                    className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-foreground/40"
+                                >
+                                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                                        <CreditCard className="h-4 w-4" /> Crédito
+                                    </div>
+                                    <p className="mt-3 text-sm font-semibold">Nenhum cartão cadastrado</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">Cadastre seu cartão para acompanhar o comprometimento.</p>
+                                </Link>
+                            )}
+
                             <Link
                                 to={`/transacoes?tipo=entrada&mes=${stats.month}`}
                                 className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-foreground/40"
